@@ -38,7 +38,7 @@ class uov_V:
     # self.__p3_sz = self.m * self.upper_triangular(self.__m)    #   _PK_P3_BYTE
 
     # Инициализация поля Галуа 
-    self.__GF = galois.GF(__GF_bitlen)
+    self.__GF = galois.GF(self.__GF_bitlen)
     
     self.__expand_sk()
 
@@ -149,7 +149,7 @@ class uov_V:
 
     return A @ B
 
-  """Обращение матрицы(ДОДЕЛАТЬ)"""
+  """Обращение матрицы"""
   def gf_invert_matr(self, A:list, B:list):
     if isinstance(A, list):
         A = self.__GF(A)
