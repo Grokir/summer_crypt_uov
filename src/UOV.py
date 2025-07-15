@@ -33,8 +33,8 @@ class uov_V:
     self.__seed_sk: int = random.getrandbits( self.__sk_seed_bitlen )
     self.__seed_pk: int = random.getrandbits( self.__pk_seed_bitlen )
     
-    self.__p1_sz = self.m * self.upper_triangular(self.__v)    #   _PK_P1_BYTE
-    self.__p2_sz = ( self.m ** 2 ) * self.v                    #   _PK_P2_BYTE
+    self.__p1_sz = self.__m * self.__upper_triangular(self.__v)    #   _PK_P1_BYTE
+    self.__p2_sz = ( self.__m ** 2 ) * self.__v                    #   _PK_P2_BYTE
     # self.__p3_sz = self.m * self.upper_triangular(self.__m)    #   _PK_P3_BYTE
 
     # Инициализация поля Галуа 
@@ -149,7 +149,7 @@ class uov_V:
 
     return A @ B
 
-  """Обращение матрицы"""
+  """Обращение матрицы(ДОДЕЛАТЬ)"""
   def gf_invert_matr(self, A:list, B:list):
     if isinstance(A, list):
         A = self.__GF(A)
@@ -163,3 +163,7 @@ class uov_V:
     if isinstance(A, list):
         A = self.__GF(A)
     return A.T
+
+
+
+    
