@@ -3,11 +3,13 @@ UOV: Unbalanced Oil and Vinegar
 """
 
 import random
-from Crypto.Cipher  import AES
+import galois
+
+from Crypto.Cipher  import AES      #К: ???
 from Crypto.Hash    import SHAKE256
 
 class uov_V:
-  __GF_bitlen:      int = 256   # Galois field size
+  __GF_bitlen:      int = 256   # Размер поля Галуа
   __salt_bitlen:    int = 128
   __pk_seed_bitlen: int = 128
   __sk_seed_bitlen: int = 256
@@ -21,25 +23,27 @@ class uov_V:
       len  q = 256 bits
     """
 
+    # Основные параметры
     self.__n = n       # PUB_n
     self.__m = m       # PUB_m
     self.__q = q       
     self.__v = n - m   # V
 
+    # Генерируем seeds
     self.__seed_sk: int = random.getrandbits( self.__sk_seed_bitlen )
     self.__seed_pk: int = random.getrandbits( self.__pk_seed_bitlen )
-
+    
     self.__p1_sz = self.m * self.upper_triangular(self.__v)    #   _PK_P1_BYTE
     self.__p2_sz = ( self.m ** 2 ) * self.v                    #   _PK_P2_BYTE
     # self.__p3_sz = self.m * self.upper_triangular(self.__m)    #   _PK_P3_BYTE
 
-
+    # Инициализация поля Галуа 
+    self.__GF = galois.GF(__GF_bitlen)
+    
     self.__expand_sk()
 
-
-  # def get_O(self) -> list:
-  #   return self.__O
-
+    # def get_O(self) -> list:
+    #   return self.__O
   def __aes128ctr(self, key, l, ctr=0) -> bytes:
     """ aes128ctr(key, l): Internal hook."""
     """ Генерирует последовтельность для публичного ключа"""
@@ -86,4 +90,76 @@ class uov_V:
           element = esk[row] % self.__q
         column.append(element)
       self.__O.append(column)
-    
+
+      #В комментраии ниже описание библиотеки поля Галуа
+  """
+  Библиотека galois - основные компоненты:
+
+  1. Создание полей:
+      GF256 = galois.GF(256)  # Поле из 256 элементов
+
+  2. Создание элементов:
+      a = GF256(123)          # Один элемент
+      arr = GF256([1, 2, 3])  # Массив элементов
+
+  3. Арифметические операции:
+      c = a + b, d = a * b, e = a ** -1  # Сложение, умножение, обращение
+
+  4. Операции с массивами:
+      C = A @ B               # Умножение матриц
+      inv_A = A.inv()         # Обращение матрицы
+
+  5. Преобразования типов:
+      num = int(a)            # Элемент поля → число
+      a = GF256(123)          # Число → элемент поля
+
+  6. Информация о поле:
+      GF256.order             # 256 (размер поля)
+      GF256.irreducible_poly  # Неприводимый полином
+
+  7. Полезные функции:
+      GF256.Random()          # Случайный элемент
+      GF256.Zero(), GF256.One()  # Нуль и единица
+  """
+#Методы поля Галуа
+
+  def gf_add(self, a: int, b: int) -> int:
+    return int(self.__GF(a) + self.__GF(b))
+
+  def gf_mul(self, a: int, b: int) -> int:
+    return int(self.__GF(a) * self.__GF(b))
+
+  """Обратный элемент"""
+  def gf_invert(self, a: int) -> int:
+    if a == 0:
+        return 0
+    return int(self.__GF(a) ** -1)
+
+  """Создание массива элементов поля"""
+  def gf_create_array(self, data: list):
+    return self.__GF(data)
+
+  """Умножение матриц"""
+  def gf_mul_matr(self, A:list, B:list):
+    # Если переданы обычные списки, преобразуем один раз
+    if isinstance(A, list):
+      A = self.__GF(A)
+    if isinstance(B, list):
+      B = self.__GF(B)
+
+    return A @ B
+
+  """Обращение матрицы(ДОДЕЛАТЬ)"""
+  def gf_invert_matr(self, A:list, B:list):
+    if isinstance(A, list):
+        A = self.__GF(A)
+    try:
+        return A.inv()
+    except:
+        return None
+
+  """Транспонирование матрицы"""
+  def gf_matr_trans(self, A):
+    if isinstance(A, list):
+        A = self.__GF(A)
+    return A.T
