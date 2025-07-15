@@ -1,11 +1,13 @@
 """
-UOV: Unbalanced Oil and Vinegar1111111111111
+UOV: Unbalanced Oil and Vinegar
 """
 
 import random
 from Crypto.Cipher  import AES
 from Crypto.Hash    import SHAKE256
 import galois
+from Crypto.Hash.SHAKE256 import SHAKE256_XOF
+
 
 class uov_V:
   __GF_bitlen:      int = 256   # Galois field size
