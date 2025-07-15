@@ -149,7 +149,7 @@ class uov_V:
 
     return A @ B
 
-  """Обращение матрицы(ДОДЕЛАТЬ)"""
+  """Обращение матрицы"""
   def gf_invert_matr(self, A:list, B:list):
     if isinstance(A, list):
         A = self.__GF(A)
