@@ -6,7 +6,7 @@ import random, galois, numpy as np
 from Crypto.Cipher  import AES
 from Crypto.Hash    import SHAKE256
 
-class uov_V:
+class uov:
   __salt_bitlen:    int = 128
   __pk_seed_bitlen: int = 128
   __sk_seed_bitlen: int = 256
@@ -40,7 +40,7 @@ class uov_V:
   def __expand_p(self, seed_pk: bytes) -> tuple:
     """ UOV.ExpandP() """
     pk = self.__aes128ctr(seed_pk, self.__p1_sz + self.__p2_sz)
-    # return (pk[0:self.__p1_sz], pk[self.__p1_sz:]) 
+    
     P1 = [self.__GF.Zeros((self.__v, self.__v)) for _ in range(self.__m)]
     P2 = [self.__GF.Zeros((self.__v, self.__m)) for _ in range(self.__m)]
     
@@ -87,7 +87,7 @@ class uov_V:
     
     for i in range(self.__m):
       Pi = self.__GF.Zeros((self.__n, self.__n))
-      Pi[:self.__v, :self.__v]  = P1[i]
+      Pi[:self.__v, :self.__v ] = P1[i]
       Pi[:self.__v,  self.__v:] = P2[i]
       Pi[ self.__v:, self.__v:] = P3[i]
       epk.append(Pi)
@@ -266,4 +266,7 @@ class uov_V:
         is_valid = False
       
     return is_valid
-    
+  
+
+  def get_epk(self, cpk: tuple):
+    return self.__expand_pk(cpk)
