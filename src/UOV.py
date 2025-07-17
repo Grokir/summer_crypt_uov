@@ -2,218 +2,268 @@
 UOV: Unbalanced Oil and Vinegar
 """
 
-import random
-from Crypto.Cipher import AES
-from Crypto.Hash import SHAKE256
-import galois
-from Crypto.Hash.SHAKE256 import SHAKE256_XOF
+import random, galois, numpy as np
+from Crypto.Cipher  import AES
+from Crypto.Hash    import SHAKE256
 
-"""
-Класс для реализации криптосистемы UOV
-"""
 class uov_V:
+  __salt_bitlen:    int = 128
+  __pk_seed_bitlen: int = 128
+  __sk_seed_bitlen: int = 256
 
-    # Константы размеров в битах
-    __GF_bitlen: int = 256       # размер поля Галуа
-    __salt_bitlen: int = 128     # размер соли
-    __pk_seed_bitlen: int = 128  # размер seed для публичного ключа(public key)
-    __sk_seed_bitlen: int = 256  # размер seed для секретного ключа(secret key)
 
+  def __init__(self, n:int=244, m:int=96, q:int=256) -> None:
     """
-    Инициализация параметров UOV
+    default params:
+      len  n = 244 bits 
+      len  m =  96 bits 
+      len  q = 256 bits # GF(q)
     """
-    def __init__(self, n: int = 244, m: int = 96, q: int = 256) -> None:
-        """
-        Args:
-            n (int): количество переменных (масленые и уксусные)
-            m (int): количество уравнений (масляные компоненты)
-            q (int): размер поля
+    self.__q :int = q
+    self.__GF     = galois.GF(self.__q)
+    self.__n :int = n       # PUB_n
+    self.__m :int = m       # PUB_m
+    self.__v :int = n - m   # V
 
-        Параметры по умолчанию:
-            len n = 244 bits
-            len m = 96 bits
-            len q = 256 bits
-        """
+    self.__p1_sz =   self.__m * (self.__v * (self.__v + 1) // 2)
+    self.__p2_sz = ( self.__m ** 2 ) * self.__v                     #   _PK_P2_BYTE
+    
 
-        # Инициализация поля Галуа с помощью библиотеки galois
-        self.__GF = galois.GF(self.__GF_bitlen)
+  def __aes128ctr(self, key: bytes, l: int, ctr: int = 0) -> bytes:
+    """ aes128ctr(key, l): Internal hook."""
+    """ Генерирует последовтельность для публичного ключа"""
+    iv: bytes = b'\x00' * 12
+    aes       = AES.new(key, AES.MODE_CTR, nonce=iv, initial_value=ctr)
+    return aes.encrypt(b'\x00' * l)
 
-        """Основные параметры схемы:
-        PUB_n (self.__n) - общее количество переменных (масляных и уксусных), используемых в публичном ключе.
-        PUB_m (self.__m) - количество уравнений (равно числу масляных переменных. Система переопределена), используемых в публичном ключе.
-        q (self.__q) - размер поля (не масло+уксус, а размер поля Галуа)
-        v (self.__v) - количество "уксусных" переменных
-        """
-        self.__n = n
-        self.__m = m
-        self.__q = q
-        self.__v = n - m
 
-        # Вычисление размеров(sz) компонентов публичного ключа
-        """
-        P_i =   [P1_i  P2_i]
-                [0     P3_i]
-                
-                Где:
+  def __expand_p(self, seed_pk: bytes) -> tuple:
+    """ UOV.ExpandP() """
+    pk = self.__aes128ctr(seed_pk, self.__p1_sz + self.__p2_sz)
+    # return (pk[0:self.__p1_sz], pk[self.__p1_sz:]) 
+    P1 = [self.__GF.Zeros((self.__v, self.__v)) for _ in range(self.__m)]
+    P2 = [self.__GF.Zeros((self.__v, self.__m)) for _ in range(self.__m)]
+    
+    idx: int = 0
+    positions = [(r, c) for c in range(self.__v) for r in range(c + 1)]
+    for (row, col) in positions:
+      for i in range(self.__m):
+        P1[i][row, col] = pk[idx]
+        idx += 1
+    
+    for col in range(self.__m):
+      for row in range(self.__v):
+        for i in range (self.__m):
+          P2[i][row, col] = pk[idx]
+          idx += 1
+    
+    return (P1, P2)     
 
-                P1 - верхняя левая часть (треугольная матрица размера v×v)
-                P2 - верхняя правая часть (прямоугольная матрица размера v×m)
-                P3 - нижняя правая часть (треугольная матрица размера m×m)
-                
-        (Методичка страница 12)
-        """
-        self.__p1_sz = self.__m * self.__upper_triangular(self.__v)    # _PK_P1_BYTE  #К: почему верхнетреугольная матрица?
-        self.__p2_sz = (self.__m ** 2) * self.__v                      # _PK_P2_BYTE
-        # self.__p3_sz = self.m * self.__upper_triangular(self.__m)    # _PK_P3_BYTE
 
-        # Инициализация seed'ов
-        # self.__seed_sk: int = random.getrandbits(self.__sk_seed_bitlen)
-        # self.__seed_pk: int = random.getrandbits(self.__pk_seed_bitlen)
-
-        # Расширение секретного ключа
-        # self.__expand_sk()
-
-    # Геттеры
-    # def get_O(self) -> list:
-    #     return self.__O
-
+  def __expand_sk(self, seed_sk: bytes):
     """
-    AES128-CTR генератор псевдослучайных данных
+    UOV.ExpandSK(seed_sk)
+    Расширяет seed секретного ключа в матрицу O
+    
+    Args:
+      seedsk: seed длиной sk_seed_len бит
+      n, m  : параметры UOV
+      q     : размер поля (16 или 256)
+    
+    Returns:
+      Матрица O размера (n-m) × m
     """
-    def __aes128ctr(self, key: int, l: int, ctr: int = 0) -> bytes:
-        """
-        Args:
-            key (int): ключ шифрования
-            l (int): длина выходной последовательности в байтах
-            ctr (int): начальное значение счетчика (по умолчанию 0)
+    shake: SHAKE256_XOF = SHAKE256.new(seed_sk)
+    data:  list         = [shake.read(1)[0] for _ in range(self.__v * self.__m)]
+    
+    return self.__GF(data).reshape((self.__v, self.__m), order='F')
 
-        Returns:
-            bytes: псевдослучайная последовательность длиной l байт
+  
+  def __expand_pk(self, cpk: tuple) -> list:
+    """ UOV.ExpandPK(pk). """
+    (seed_pk, P3) = cpk
+    (P1, P2)      = self.__expand_p(seed_pk)
+    epk: list     = []
+    
+    for i in range(self.__m):
+      Pi = self.__GF.Zeros((self.__n, self.__n))
+      Pi[:self.__v, :self.__v]  = P1[i]
+      Pi[:self.__v,  self.__v:] = P2[i]
+      Pi[ self.__v:, self.__v:] = P3[i]
+      epk.append(Pi)
+    
+    return epk
 
-        Note:
-            Генерирует последовательность для публичного ключа
-        """
-        iv: bytes = b'\x00' * 12
-        aes = AES.new(key, AES.MODE_CTR, nonce=iv, initial_value=ctr)
-        return aes.encrypt(b'\x00' * l)
 
+
+#############################
+###    Private methods    ###
+###      mathematic       ###
+#############################
+
+
+  def __upper_triangular(self, P1, P2, O):
     """
-    Подсчет количества ненулевых элементов в верхнетреугольной матрице
+    P3_i = Upper( - O^T·P1_i·O  -  O^T·P2_i )
     """
-    def __upper_triangular(self, N: int) -> int:
-        """
-        Args:
-            N (int): размер квадратной матрицы
+    OT = O.T
+    ut_matr = []
+    for i in range(self.__m):
+      M = -(OT @ P1[i] @ O + OT @ P2[i])
+      S = self.__GF.Zeros((self.__m, self.__m))
+ 
+      for r in range(self.__m):
+        for c in range(r, self.__m):
+          if r == c:
+            S[r, c] = M[r, c]
+          else:
+            S[r, c] = M[r, c] + M[c, r]
+      ut_matr.append(S)
 
-        Returns:
-            int: количество элементов в верхнем треугольнике (включая диагональ)
+    return ut_matr
 
-        Formula:
-            N * (N + 1) / 2
-        """
 
-        return N * (N + 1) // 2
+  def __get_matr_rank(self, matr) -> int:
+    tmp_matr = matr.copy()
+    rows, cols = tmp_matr.shape
+    rank:int = 0
+    for col in range(cols):
+      pivot = next((r for r in range(rank, rows) if tmp_matr[r, col] != 0), None)
+      
+      if pivot is not None:
+        tmp_matr[[rank, pivot]] = tmp_matr[[pivot, rank]]
+        tmp_matr[rank] *= self.__GF(1) / tmp_matr[rank, col]
+        
+        for r in range(rows):
+          if r != rank and tmp_matr[r, col] != 0:
+            tmp_matr[r] -= tmp_matr[rank] * tmp_matr[r, col]
+        
+        rank += 1
+    return rank
 
+
+
+  def __matr_transpose(self, A):
+    return self.__GF(A).T
+  
+
+  def __gauss_solve(self, A, b):
+    """ Solve a system of linear equations in GF."""
+    tmp_A = A.copy()
+    tmp_b = b.copy().reshape(-1, 1)
+    Ab = self.__GF(np.hstack([tmp_A, tmp_b]))
+    n = tmp_A.shape[0]
+
+    for i in range(n):
+      pivot = next((r for r in range(i, n) if Ab[r, i] != 0), None)
+      
+      if ( pivot is None ):
+        return None
+      
+      if ( pivot != i ):
+        Ab[[i, pivot]] = Ab[[pivot, i]]
+      
+      Ab[i] *= self.__GF(1) / Ab[i, i]
+      
+      for r in range(n):
+        if ( r != i ) and ( Ab[r, i] != 0 ):
+          Ab[r] -= Ab[i] * Ab[r, i]
+    
+    return Ab[:, -1]
+    
+  
+  def __quad_form(self, P, v): # Понадобится в алгоритме Sign
+    """vᵀ·P·v в GF(q)."""
+    return v @ (P @ v)
+
+
+############################
+###    Public methods    ###
+############################
+
+
+  def multiple_over_GF(self, lhs: int, rhs: int) -> int:
+    """ Перемножение чисел над полем Галуа"""
+    return int(self.__GF(lhs) * self.__GF(rhs)) 
+
+
+  def expand_SK(self, csk: tuple) -> tuple:
     """
-    Расширение seed в компоненты P1 и P2 публичного ключа
+    UOV.ExpandSK: (seed_pk, seed_sk) → esk = (seed_sk, O, {P1_i}, {S_i})
+    где S_i = (P1_i + P1_i^T)·O + P2_i
+    * по методичке
     """
-    def __expand_p(self, seed: int) -> tuple:
-        """
-        Args:
-            seed (int): seed для генерации компонентов
 
-        Returns:
-            tuple: (P1, P2) - компоненты публичного ключа
+    (seed_pk, seed_sk)  = csk
+    O                   = self.__expand_sk(seed_sk)
+    (P1, P2)            = self.__expand_p (seed_pk)
+    S: list             = [(P1[i] + P1[i].T) @ O + P2[i] for i in range(self.__m)]
+    
+    return (seed_sk, O, P1, S)
+  
 
-        Note:
-            Реализует алгоритм UOV.ExpandP()
-        """
-        pk = self.__aes128ctr(seed, self.__p1_sz + self.__p2_sz)
-        return (pk[0:self.__p1_sz], pk[self.__p1_sz:])
+  def keygen(self):
+    """ UOV.classic.KeyGen(). """
+    """ Генерация ключей """
 
-    """
-    Расширение seed секретного ключа в матрицу O
-    """
-    def __expand_sk(self, seed_sk):
-        """
-        Args:
-            seed_sk: seed длиной sk_seed_len бит
+    seed_sk: int = random.randbytes( self.__sk_seed_bitlen // 8 )
+    seed_pk: int = random.randbytes( self.__pk_seed_bitlen // 8 )
 
-        Note:
-            Параметры n, m, q используются из self
-            q: размер поля (16 или 256)
+    O        = self.__expand_sk       (  seed_sk  )
+    (P1, P2) = self.__expand_p        (  seed_pk  )
+    P3       = self.__upper_triangular( P1, P2, O )
+    
+    return (seed_pk, P3), (seed_pk, seed_sk)
+  
 
-        Returns:
-            Устанавливает self.__O - матрица O размера (n-m) × m
-        """
-        shake: SHAKE256_XOF = SHAKE256.new(b"{seed_sk:=b}")
-        esk = shake.read(32)
+  def sign(self, esk:tuple, msg: bytes):
+    (seed_sk, O, P1, S) = esk
+    salt = random.randbytes(self.__salt_bitlen // 8)
+    t = self.__GF(list(SHAKE256.new(msg + salt).read(self.__m)))
 
-        # Используем SHAKE256 для генерации псевдослучайных данных
-        # Генерируем матрицу O в column-major порядке
-        self.__O = []
+    cnt_rounds = 256
 
-    """
-    Расширение сжатого публичного ключа в полный
-    """
-    def __expand_pk(self, pk):
-        """
-        Args:
-            pk: сжатый публичный ключ
+    for ctr in range(cnt_rounds):
+      shake = SHAKE256.new(msg + salt + seed_sk + bytes([ctr]))
+      v = self.__GF(list(shake.read(self.__v)))
+      L = self.__GF.Zeros((self.__m, self.__m))
+      
+      for i in range(self.__m):
+        L[i, :] = v @ S[i]
+      
+      if ( self.__get_matr_rank(L) < self.__m ):
+        continue
+        
+      y   = self.__GF([self.__quad_form(P1[i], v) for i in range(self.__m)])
+      rhs = t - y
+      x   = self.__gauss_solve(L, rhs)
+      s   = self.__GF.Zeros(self.__n)
+      
+      s     [:self.__v]     =  v
+      O_bar                 =  self.__GF.Zeros((self.__n, self.__m))
+      O_bar [:self.__v, :]  =  O
+      O_bar [self.__v:, :]  =  self.__GF.Identity(self.__m)
+      s                     += (O_bar @ x.reshape((self.__m, 1))).flatten()
 
-        Returns:
-            epk: расширенный публичный ключ
+      return (s, salt)
 
-        Note:
-            Реализует алгоритм UOV.ExpandPK(cpk)
-        """
-        seed_pk = pk[:self.seed_pk_sz]
-        p3 = pk[self.seed_pk_sz:]
-        (p1, p2) = self.__expand_p(seed_pk)
-        epk = p1 + p2 + p3
-        return epk
+    return None
+  
 
-    # ================================================================
-    #                         PUBLIC METHODS
-    # ================================================================
+  def verify(self, cpk: tuple, msg: bytes, signature) -> bool:
+    if ( signature is None ):
+      return False
+    
+    (s, salt) = signature 
+    epk = self.__expand_pk(cpk)
+    t = self.__GF(list(SHAKE256.new(msg + salt).read(self.__m)))
 
-    def multiple_over_GF(self, lhs: int, rhs: int) -> int:
-        return int(self.__GF(lhs) * self.__GF(rhs))
+    is_valid: bool = True
 
-    """
-    Генерация пары ключей для схемы UOV
-    """
-    def keygen(self):
-        """
-        Returns:
-            tuple: (pk, sk) - пара (публичный и секретный ключи)
-        """
-
-        # Генерация seed для секретного ключа
-        seed_sk: int = random.getrandbits(self.__sk_seed_bitlen)
-        # self.__seed_pk: int = random.getrandbits(self.__pk_seed_bitlen)
-
-        # Генерация seed для публичного ключа и параметра so
-        seed_pk_so = self.shake256(seed_sk, self.seed_pk_sz + self.so_sz)
-        seed_pk = seed_pk_so[:self.seed_pk_sz]
-        so = seed_pk_so[self.seed_pk_sz:]
-
-        # Расширение seed публичного ключа в компоненты P1 и P2
-        (p1, p2) = self.expand_p(seed_pk)
-
-        # Вычисление секретного ключа и компонента P3
-        (sks, p3) = self.calc_f2_p3(p1, p2, so)
-
-        # Формирование публичного ключа (с учетом сжатия)
-        if self.pkc:
-            pk = seed_pk + p3                # cpk - сжатый публичный ключ
-        else:
-            pk = p1 + p2 + p3                # epk - расширенный публичный ключ
-
-        # Формирование секретного ключа (с учетом сжатия)
-        if self.skc:
-            sk = seed_sk                     # csk - сжатый секретный ключ
-        else:
-            sk = seed_sk + so + p1 + sks     # esk - расширенный секретный ключ
-
-        return (pk, sk)
+    for i, Pi in enumerate(epk):
+      tmp = self.__quad_form(Pi, s) #sᵀ·Pi·s
+      if ( tmp != t[i] ):
+        is_valid = False
+      
+    return is_valid
+    

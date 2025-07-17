@@ -1,5 +1,11 @@
 from UOV import uov_V
+from tests import test_uov
 
-cipher = uov_V()
 
-print(cipher.get_O())
+def main():
+  test_uov()
+
+
+
+if __name__ == "__main__":
+  main()
