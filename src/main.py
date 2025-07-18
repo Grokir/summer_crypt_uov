@@ -19,9 +19,8 @@ def main():
 
   timer_decoration("Test UOV-Ip", test_uov_Ip)
   
-  timer_decoration("Test Attack on UOV-Ip", test_attack_UOV_Ip_numerical)
+  timer_decoration("Test Attack on UOV-Ip", test_attack_UOV_Ip)
   
-
 
 if __name__ == "__main__":
   main()
