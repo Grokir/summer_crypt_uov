@@ -1,10 +1,11 @@
 import galois
+import numpy as np
 from sympy import Matrix, solve, symbols
 from UOV import uov  # импортируем все функции из основной реализации
 
 
 # Используем те же параметры, что и в основной реализации
-GF256 = galois.GF(256)
+
 
 """
     В UOV секретный ключ состоит из двух частей: центральных полиномов F^(k) и матрицы преобразования T.
@@ -17,7 +18,7 @@ class UOVReconciliationAttack(uov):
     """
 
     # =========== ИНИЦИАЛИЗАЦИЯ ===========
-    def __init__(self, public_key, n, m):
+    def __init__(self, public_key, n: int, m:int, q: int):
         """
         Инициализация атаки
 
@@ -26,9 +27,12 @@ class UOVReconciliationAttack(uov):
             n: общее количество переменных(масляные+уксусные)
             m: количество полиномов(количество равно количество масляных переменных)
         """
-        self.__n = n
-        self.__m = m  # это 'o' в алгоритме
-        self.__v = n - m  # количество vinegar переменных
+        self.__n  = n
+        self.__m  = m       # это 'o' в алгоритме
+        self.__v  = n - m   # количество vinegar переменных
+        self.__q  = q
+        self.__GF = galois.GF(self.__q)
+
         self.public_polynomials = []
         if isinstance(public_key, tuple):
             # Если передан компактный ключ, расширяем его
@@ -59,14 +63,16 @@ class UOVReconciliationAttack(uov):
         T_matr = Matrix.eye(self.__n)
 
         # Создаем неизвестные переменные только для vinegar элементов
-        unknown_variables = []
+        # unknown_variables = []
+        unknown_variables = self.__GF.Zeros(self.__v)
 
         # В столбце current_j первые v элементов - неизвестные
         for vinegar_row in range(self.__v):
             variable_name = f't_{vinegar_row}_{current_j}'
             unknown_variable = symbols(variable_name)
             T_matr[vinegar_row, current_j] = unknown_variable
-            unknown_variables.append(unknown_variable)
+            # unknown_variables.append(unknown_variable)
+            unknown_variables[vinegar_row] = unknown_variable
 
         return T_matr, unknown_variables
 
@@ -135,13 +141,37 @@ class UOVReconciliationAttack(uov):
             M_T: итоговая матрица преобразования
         """
         if not T_matrices:
-            return GF256.Identity(self.__n) # Если нет матриц, возвращаем единичную матрицу
+            return self.__GF.Identity(self.__n) # Если нет матриц, возвращаем единичную матрицу
 
         M_T = T_matrices[0] #M_T - первая матрица преобразования
         for T in T_matrices[1:]:
             M_T = M_T @ T   # Умножаем последовательно все матрицы T с использованием библиотеки galois
 
         return M_T
+
+    def _gauss_solve(self, A, b):
+        """ Solve a system of linear equations in GF."""
+        tmp_A = A.copy()
+        tmp_b = b.copy().reshape(-1, 1)
+        Ab = self.__GF(np.hstack([tmp_A, tmp_b]))
+        n = tmp_A.shape[0]
+
+        for i in range(n):
+            pivot = next((r for r in range(i, n) if Ab[r, i] != 0), None)
+        
+        if ( pivot is None ):
+            return None
+        
+        if ( pivot != i ):
+            Ab[[i, pivot]] = Ab[[pivot, i]]
+        
+        Ab[i] *= self.__GF(1) / Ab[i, i]
+        
+        for r in range(n):
+            if ( r != i ) and ( Ab[r, i] != 0 ):
+                Ab[r] -= Ab[i] * Ab[r, i]
+        
+        return Ab[:, -1]
 
     """
     .............................................
@@ -187,7 +217,9 @@ class UOVReconciliationAttack(uov):
         matr_size = current_j + 1
         T_matr, unknown_variables = self._create_unknown_variables_t(current_j)
 
-        quadratic_equations = []
+        # quadratic_equations = []
+        quadratic_equations = self.__GF.Zeros(self.__m)
+        
 
         # Для каждого полинома k строим уравнение
         for polynomial_index in range(self.__m):
@@ -199,7 +231,8 @@ class UOVReconciliationAttack(uov):
             # Требуем, чтобы элемент на позиции (j+1, j+1) был равен 0
             zero_constraint_position = current_j    # это индекс j+1 в нумерации с 0, позиция (j+1, j+1) в матрице
             constraint_equation = result_matr[zero_constraint_position, zero_constraint_position]
-            quadratic_equations.append(constraint_equation) # добавляем уравнение в список, constraint - это выражение, равное 0
+            # quadratic_equations.append(constraint_equation) # добавляем уравнение в список, constraint - это выражение, равное 0
+            quadratic_equations[polynomial_index] = constraint_equation
 
         return quadratic_equations, unknown_variables
 
@@ -219,15 +252,17 @@ class UOVReconciliationAttack(uov):
 
         try:
             # Простой подход: пробуем решить систему напрямую
-            # print("Пробуем решить систему напрямую...")
+            print("Пробуем решить систему напрямую...")
             # direct_solution = solve(equations, unknown_variables)
+            
+            direct_solution = self._gauss_solve(equations, unknown_variables)
 
-            # if direct_solution:
-            #     print("Система решена напрямую!")
-            #     return direct_solution
+            if direct_solution:
+                print("Система решена напрямую!")
+                return direct_solution
 
             # Если прямое решение не работает, используем XL подход
-            # print("Прямое решение не найдено, используем XL расширение...")
+            print("Прямое решение не найдено, используем XL расширение...")
 
             # XL: расширяем систему умножением на мономы
             extended_equations = self._xl_expand_system(equations, unknown_variables, max_degree)
@@ -257,14 +292,14 @@ class UOVReconciliationAttack(uov):
         Returns:
             T_matrix: матрица преобразования
         """
-        T_matr = GF256.Identity(self.__n)
+        T_matr = self.__GF.Identity(self.__n)
 
         # Применить найденные значения переменных
         for vinegar_row in range(self.__v):
             variable_name = f't_{vinegar_row}_{current_j}'
             if variable_name in solution:
                 value = int(solution[variable_name]) % 256
-                T_matr[vinegar_row, current_j] = GF256(value)
+                T_matr[vinegar_row, current_j] = self.__GF(value)
 
         return T_matr
 

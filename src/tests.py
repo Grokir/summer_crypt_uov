@@ -73,7 +73,7 @@ def test_attack_UOV_Ip():
     print(f"Ключи созданы. Размер открытого ключа: {len(epk)} полиномов")
 
     # Создаем объект атаки
-    attack = UOVReconciliationAttack(epk, n, m)
+    attack = UOVReconciliationAttack(public_key=epk, n=n, m=m, q=q)
 
     # Запускаем атаку
     result = attack.reconciliation_attack_xl(max_xl_degree=3)
@@ -104,11 +104,11 @@ def test_attack_small():
     test_polynomials = []
     for i in range(test_m):
         # Создаем случайную матрицу 6x6 для каждого полинома
-        poly_matrix = GF256.Random((test_n, test_n))
+        poly_matrix = self.__GF.Random((test_n, test_n))
         # Делаем матрицу верхнетреугольной (для квадратичной формы)
         for row in range(test_n):
             for col in range(row):
-                poly_matrix[row, col] = GF256(0)  # нули под диагональю
+                poly_matrix[row, col] = self.__GF(0)  # нули под диагональю
         test_polynomials.append(poly_matrix)
 
     print(f"Созданы тестовые полиномы: {len(test_polynomials)} матриц {test_n}x{test_n}")
