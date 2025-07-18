@@ -126,3 +126,35 @@ def test_attack_small():
         print(f"Размер матрицы преобразования: {M_T.shape}")
     else:
         print("Атака не удалась")
+
+
+def test_attack_UOV_Ip_numerical():
+    """
+    Тест численной атаки на UOV-Ip
+    """
+    print("=== Тест численной UOV reconciliation attack на UOV-Ip ===")
+
+    q: int = 256
+    n: int = 112
+    m: int = 44
+
+    signer = uov(n=n, m=m, q=q)
+    cpk, csk = signer.keygen()
+    epk = signer.get_epk(cpk)
+
+    print(f"Ключи созданы. Размер открытого ключа: {len(epk)} полиномов")
+
+    attack = UOVReconciliationAttack(public_key=epk, n=n, m=m, q=q)
+
+    # Запускаем численную атаку
+    result = attack.reconciliation_attack_numerical(max_attempts_per_step=50000)
+
+    if result is not None:
+        F_recovered, M_T = result
+        print("Численная атака завершена успешно!")
+        print(f"Восстановлено {len(F_recovered)} полиномов")
+        print(f"Размер матрицы преобразования: {M_T.shape}")
+    else:
+        print("Численная атака не удалась")
+
+

@@ -49,10 +49,11 @@ class UOVReconciliationAttack(uov):
     ....................................................
     """
 
-    # ---------- Создание tшек для _build_quadratic_system ----------
+    # ---------- Создание tшек для _build_quadratic_system, reconciliation_attack_xl ----------
     def _create_unknown_variables_t(self, current_j):
         """
-        Создать неизвестные переменные для матрицы преобразования T_{j+1}
+        Этот метод создает матрицу преобразования T_{j+1} специального вида
+        согласно формуле (5.15) из методички (страница 113).
         Args:
             current_j: текущий индекс переменной
         Returns:
@@ -66,13 +67,37 @@ class UOVReconciliationAttack(uov):
         # unknown_variables = []
         unknown_variables = self.__GF.Zeros(self.__v)
 
+
         # В столбце current_j первые v элементов - неизвестные
         for vinegar_row in range(self.__v):
             variable_name = f't_{vinegar_row}_{current_j}'
+            """
+            Синтаксис: f'строка с {переменными}' - это f-string (formatted string literal)
+            
+            f'...' - префикс f указывает на форматированную строку
+            {vinegar_row} - подстановка значения переменной vinegar_row
+            {current_j} - подстановка значения параметра current_j
+            Результат: строка вида 't_0_5', 't_1_5', 't_2_5' и т.д.
+            """
+
+
             unknown_variable = symbols(variable_name)
             T_matr[vinegar_row, current_j] = unknown_variable
             # unknown_variables.append(unknown_variable)
-            unknown_variables[vinegar_row] = unknown_variable
+            unknown_variables[vinegar_row] = unknown_variable #К: НЕСОВМЕСТИМЫЕ ТИПЫ?
+
+        """
+        T_i =   [1, 0, 0, ..., 0, t_{1,i}, 0, ..., 0]   ← vinegar row 1
+                [0, 1, 0, ..., 0, t_{2,i}, 0, ..., 0]   ← vinegar row 2  
+                [0, 0, 1, ..., 0, t_{3,i}, 0, ..., 0]   ← vinegar row 3
+                [................, t_{v,i}, .........]   ← vinegar row v
+                [0, 0, 0, ..., 0,   1,    0, ..., 0]   ← oil row 1
+                [0, 0, 0, ..., 0,   0,    1, ..., 0]   ← oil row 2
+                [........................., 1]          ← oil row m
+
+                                   ↑
+                                столбец i                     
+        """
 
         return T_matr, unknown_variables
 
@@ -158,19 +183,19 @@ class UOVReconciliationAttack(uov):
 
         for i in range(n):
             pivot = next((r for r in range(i, n) if Ab[r, i] != 0), None)
-        
+
         if ( pivot is None ):
             return None
-        
+
         if ( pivot != i ):
             Ab[[i, pivot]] = Ab[[pivot, i]]
-        
+
         Ab[i] *= self.__GF(1) / Ab[i, i]
-        
+
         for r in range(n):
             if ( r != i ) and ( Ab[r, i] != 0 ):
                 Ab[r] -= Ab[i] * Ab[r, i]
-        
+
         return Ab[:, -1]
 
     """
@@ -219,7 +244,7 @@ class UOVReconciliationAttack(uov):
 
         # quadratic_equations = []
         quadratic_equations = self.__GF.Zeros(self.__m)
-        
+
 
         # Для каждого полинома k строим уравнение
         for polynomial_index in range(self.__m):
@@ -254,7 +279,7 @@ class UOVReconciliationAttack(uov):
             # Простой подход: пробуем решить систему напрямую
             print("Пробуем решить систему напрямую...")
             # direct_solution = solve(equations, unknown_variables)
-            
+
             direct_solution = self._gauss_solve(equations, unknown_variables)
 
             if direct_solution:
