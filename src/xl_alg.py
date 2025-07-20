@@ -73,9 +73,11 @@ class UOVReconciliationAttack(uov):
         # Генерация всех мономов степени <= max_degree
         monomials = []
         for deg in range(max_degree + 1):
-            for exp in product(range(deg + 1), repeat=v):
+            # for exp in product(range(deg + 1), repeat=v):
+            for exp in product(range(deg + 1)):
                 if sum(exp) <= deg:
                     monomials.append(tuple(exp))
+                    # print(monomials)
         
         # Создаем матрицу коэффициентов
         num_monomials = len(monomials)
@@ -107,12 +109,14 @@ class UOVReconciliationAttack(uov):
         kernel = Vt[-1]
         
         # Извлекаем решение для переменных
+        print(monomials)
         solution = {}
         for i in range(v):
             # Моном, соответствующий переменной t_i
-            mono = tuple(1 if j == i else 0 for j in range(v))
+            mono = tuple(1 if j == i else 0 for j in range(1))
+            # mono = tuple(1 if j == i else 0)
             idx = monomials.index(mono)
-            solution[f't_{i}_{self.__v}'] = kernel[idx]
+            solution[f'x_{i}_{self.__v}'] = kernel[idx]
         
         return solution
 
