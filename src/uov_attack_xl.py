@@ -3,8 +3,24 @@ import numpy as np
 from sympy import Matrix, solve, symbols
 from UOV import uov  # импортируем все функции из основной реализации
 
+from test_solve_ls import solve as XL_solve, solve_equat
 
 # Используем те же параметры, что и в основной реализации
+
+def PRINT_LINSYS(equations, unknown_variables):
+    # with open("matr.txt", "w") as f:
+    #     f.write(equations)
+
+    # import io
+    # outFile = io.open('matr.txt', 'w', encoding='utf8')
+    # outFile.write(equations)
+    # outFile.close()
+
+    # print("\n[+] WRITE DONE\n")
+    
+    print(equations)
+
+
 
 
 """
@@ -49,11 +65,10 @@ class UOVReconciliationAttack(uov):
     ....................................................
     """
 
-    # ---------- Создание tшек для _build_quadratic_system, reconciliation_attack_xl ----------
+    # ---------- Создание tшек для _build_quadratic_system ----------
     def _create_unknown_variables_t(self, current_j):
         """
-        Этот метод создает матрицу преобразования T_{j+1} специального вида
-        согласно формуле (5.15) из методички (страница 113).
+        Создать неизвестные переменные для матрицы преобразования T_{j+1}
         Args:
             current_j: текущий индекс переменной
         Returns:
@@ -64,40 +79,17 @@ class UOVReconciliationAttack(uov):
         T_matr = Matrix.eye(self.__n)
 
         # Создаем неизвестные переменные только для vinegar элементов
-        # unknown_variables = []
-        unknown_variables = self.__GF.Zeros(self.__v)
-
+        unknown_variables = []
+        # unknown_variables = self.__GF.Zeros(self.__v)
 
         # В столбце current_j первые v элементов - неизвестные
         for vinegar_row in range(self.__v):
-            variable_name = f't_{vinegar_row}_{current_j}'
-            """
-            Синтаксис: f'строка с {переменными}' - это f-string (formatted string literal)
-            
-            f'...' - префикс f указывает на форматированную строку
-            {vinegar_row} - подстановка значения переменной vinegar_row
-            {current_j} - подстановка значения параметра current_j
-            Результат: строка вида 't_0_5', 't_1_5', 't_2_5' и т.д.
-            """
-
-
+            # variable_name = f't_{vinegar_row}_{current_j}'
+            variable_name = f'x_{vinegar_row}'
             unknown_variable = symbols(variable_name)
             T_matr[vinegar_row, current_j] = unknown_variable
-            # unknown_variables.append(unknown_variable)
-            unknown_variables[vinegar_row] = unknown_variable #К: НЕСОВМЕСТИМЫЕ ТИПЫ?
-
-        """
-        T_i =   [1, 0, 0, ..., 0, t_{1,i}, 0, ..., 0]   ← vinegar row 1
-                [0, 1, 0, ..., 0, t_{2,i}, 0, ..., 0]   ← vinegar row 2  
-                [0, 0, 1, ..., 0, t_{3,i}, 0, ..., 0]   ← vinegar row 3
-                [................, t_{v,i}, .........]   ← vinegar row v
-                [0, 0, 0, ..., 0,   1,    0, ..., 0]   ← oil row 1
-                [0, 0, 0, ..., 0,   0,    1, ..., 0]   ← oil row 2
-                [........................., 1]          ← oil row m
-
-                                   ↑
-                                столбец i                     
-        """
+            unknown_variables.append(unknown_variable)
+            # unknown_variables[vinegar_row] = unknown_variable
 
         return T_matr, unknown_variables
 
@@ -183,19 +175,19 @@ class UOVReconciliationAttack(uov):
 
         for i in range(n):
             pivot = next((r for r in range(i, n) if Ab[r, i] != 0), None)
-
+        
         if ( pivot is None ):
             return None
-
+        
         if ( pivot != i ):
             Ab[[i, pivot]] = Ab[[pivot, i]]
-
+        
         Ab[i] *= self.__GF(1) / Ab[i, i]
-
+        
         for r in range(n):
             if ( r != i ) and ( Ab[r, i] != 0 ):
                 Ab[r] -= Ab[i] * Ab[r, i]
-
+        
         return Ab[:, -1]
 
     """
@@ -242,10 +234,9 @@ class UOVReconciliationAttack(uov):
         matr_size = current_j + 1
         T_matr, unknown_variables = self._create_unknown_variables_t(current_j)
 
-        # quadratic_equations = []
-        quadratic_equations = self.__GF.Zeros(self.__m)
-
-
+        quadratic_equations = []
+        # quadratic_equations = self.__GF.Zeros(self.__m)
+        
         # Для каждого полинома k строим уравнение
         for polynomial_index in range(self.__m):
             polynomial_matr = Matrix(current_polynomials[polynomial_index])
@@ -256,8 +247,8 @@ class UOVReconciliationAttack(uov):
             # Требуем, чтобы элемент на позиции (j+1, j+1) был равен 0
             zero_constraint_position = current_j    # это индекс j+1 в нумерации с 0, позиция (j+1, j+1) в матрице
             constraint_equation = result_matr[zero_constraint_position, zero_constraint_position]
-            # quadratic_equations.append(constraint_equation) # добавляем уравнение в список, constraint - это выражение, равное 0
-            quadratic_equations[polynomial_index] = constraint_equation
+            quadratic_equations.append(constraint_equation) # добавляем уравнение в список, constraint - это выражение, равное 0
+            # quadratic_equations[polynomial_index] = constraint_equation
 
         return quadratic_equations, unknown_variables
 
@@ -279,8 +270,14 @@ class UOVReconciliationAttack(uov):
             # Простой подход: пробуем решить систему напрямую
             print("Пробуем решить систему напрямую...")
             # direct_solution = solve(equations, unknown_variables)
-
-            direct_solution = self._gauss_solve(equations, unknown_variables)
+            
+            # TODO: распечатать систему уравнений
+            # direct_solution = self._gauss_solve(equations, unknown_variables)
+            # direct_solution = XL_solve(equations, unknown_variables, max_degree)
+            direct_solution = solve_equat(equations, unknown_variables)
+            
+            # PRINT_LINSYS(equations, unknown_variables)
+            
 
             if direct_solution:
                 print("Система решена напрямую!")
@@ -290,15 +287,15 @@ class UOVReconciliationAttack(uov):
             print("Прямое решение не найдено, используем XL расширение...")
 
             # XL: расширяем систему умножением на мономы
-            extended_equations = self._xl_expand_system(equations, unknown_variables, max_degree)
+            # extended_equations = self._xl_expand_system(equations, unknown_variables, max_degree)
 
             # Решаем расширенную систему
-            print(f"Расширенная система: {len(extended_equations)} уравнений")
-            xl_solution = solve(extended_equations, unknown_variables)
+            # print(f"Расширенная система: {len(extended_equations)} уравнений")
+            # xl_solution = solve(extended_equations, unknown_variables)
 
-            if xl_solution:
-                print("Система решена с помощью XL!")
-                return xl_solution
+            # if xl_solution:
+            #     print("Система решена с помощью XL!")
+            #     return xl_solution
 
             print("XL не смог решить систему")
             return None
@@ -349,30 +346,32 @@ class UOVReconciliationAttack(uov):
         for j in range(self.__n - 1, self.__v - 1, -1):
             print(f"\n--- Шаг {self.__n - j}: обрабатываем позицию j = {j} ---")
 
-            try:
-                # Шаг 2-4: Построить систему уравнений
-                equations, T_vars = self._build_quadratic_system(P_current, j)
-                print(f"Построена система из {len(equations)} уравнений")
+            # try:
+            # Шаг 2-4: Построить систему уравнений
+            equations, T_vars = self._build_quadratic_system(P_current, j)
+            print(f"Построена система из {len(equations)} уравнений")
 
-                # Шаг 5: Решить с помощью XL
-                print("Решаем систему с XL...")
-                solution = self._solve_with_xl(equations, T_vars, max_xl_degree)
+            # Шаг 5: Решить с помощью XL
+            print("Решаем систему с XL...")
+            
+            solution = self._solve_with_xl(equations, T_vars, max_xl_degree)
+                       
 
-                if solution is None:
-                    print(f"Не удалось решить систему на шаге j={j}")
-                    return None
-
-                # Применить решение
-                T_j_plus_1 = self._construct_transformation_matrix(solution, j)
-                T_matrices.append(T_j_plus_1)
-
-                # Шаг 6: Обновить полиномы
-                P_current = self._update_polynomials(P_current, T_j_plus_1)
-                print(f"Полиномы обновлены для j={j}")
-
-            except Exception as e:
-                print(f"Ошибка на шаге j={j}: {e}")
+            if solution is None:
+                print(f"Не удалось решить систему на шаге j={j}")
                 return None
+
+            # Применить решение
+            T_j_plus_1 = self._construct_transformation_matrix(solution, j)
+            T_matrices.append(T_j_plus_1)
+
+            # Шаг 6: Обновить полиномы
+            P_current = self._update_polynomials(P_current, T_j_plus_1)
+            print(f"Полиномы обновлены для j={j}")
+
+            # except Exception as e:
+            #     print(f"Ошибка на шаге j={j}: {e}")
+            #     return None
 
         # Шаги 8-10: Финализация
         print("\nФинализация атаки...")

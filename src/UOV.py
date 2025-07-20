@@ -142,11 +142,6 @@ class uov:
     return rank
 
 
-
-  def __matr_transpose(self, A):
-    return self.__GF(A).T
-  
-
   def __gauss_solve(self, A, b):
     """ Solve a system of linear equations in GF."""
     tmp_A = A.copy()

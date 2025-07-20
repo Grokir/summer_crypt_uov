@@ -17,10 +17,13 @@ def main():
   # print("[*] Test UOV-V")
   # test_uov_V()
 
-  timer_decoration("Test UOV-Ip", test_uov_Ip)
+  # timer_decoration("Test UOV-Ip", test_uov_Ip)
+  # timer_decoration("Test UOV-III", test_uov_III)
+  # timer_decoration("Test UOV-V", test_uov_V)
   
   timer_decoration("Test Attack on UOV-Ip", test_attack_UOV_Ip)
   
+
 
 if __name__ == "__main__":
   main()

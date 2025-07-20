@@ -1,5 +1,58 @@
 from UOV import uov
-from uov_attack_xl import *
+# from uov_attack_xl import *
+from xl_alg import *
+# from test_solve_ls import gauss_elimination
+
+
+
+def test_uov_Ip():
+  import galois
+  q = 256
+  GF256 = galois.GF(q)
+  
+  signer = uov(n=112, m=44, q=q)
+  cpk, csk = signer.keygen()
+  esk = signer.expand_SK(csk)
+
+  msg = b"example message"
+  sig = signer.sign(esk, msg)
+  print("[TEST] Valid signature:", signer.verify(cpk, msg, sig))
+
+  # Создаем неправильную подпись для того же сообщения
+  if sig is not None:
+    s, salt = sig
+
+    wrong_s = s.copy()
+    wrong_s[0] += GF256(1)  # Изменяем первый элемент подписи
+    wrong_sig = (wrong_s, salt)
+    print("[TEST] Invalid signature:", ( not signer.verify(cpk, msg, wrong_sig) ))
+  else:
+    print("[ERROR] Failed to generate initial signature")
+
+
+def test_uov_III():
+  import galois
+  q = 256
+  GF256 = galois.GF(q)
+  
+  signer = uov(n=184, m=72, q=q)
+  cpk, csk = signer.keygen()
+  esk = signer.expand_SK(csk)
+
+  msg = b"example message"
+  sig = signer.sign(esk, msg)
+  print("[TEST] Valid signature:", signer.verify(cpk, msg, sig))
+
+  # Создаем неправильную подпись для того же сообщения
+  if sig is not None:
+    s, salt = sig
+
+    wrong_s = s.copy()
+    wrong_s[0] += GF256(1)  # Изменяем первый элемент подписи
+    wrong_sig = (wrong_s, salt)
+    print("[TEST] Invalid signature:", ( not signer.verify(cpk, msg, wrong_sig) ))
+  else:
+    print("[ERROR] Failed to generate initial signature")
 
 
 def test_uov_V():
@@ -26,30 +79,6 @@ def test_uov_V():
   else:
     print("[ERROR] Failed to generate initial signature")
 
-
-def test_uov_Ip():
-  import galois
-  q = 256
-  GF256 = galois.GF(q)
-  
-  signer = uov(n=112, m=44, q=q)
-  cpk, csk = signer.keygen()
-  esk = signer.expand_SK(csk)
-
-  msg = b"example message"
-  sig = signer.sign(esk, msg)
-  print("[TEST] Valid signature:", signer.verify(cpk, msg, sig))
-
-  # Создаем неправильную подпись для того же сообщения
-  if sig is not None:
-    s, salt = sig
-
-    wrong_s = s.copy()
-    wrong_s[0] += GF256(1)  # Изменяем первый элемент подписи
-    wrong_sig = (wrong_s, salt)
-    print("[TEST] Invalid signature:", ( not signer.verify(cpk, msg, wrong_sig) ))
-  else:
-    print("[ERROR] Failed to generate initial signature")
 
 
 def test_attack_UOV_Ip():
@@ -88,6 +117,9 @@ def test_attack_UOV_Ip():
 
 
 def test_attack_small():
+    import galois
+    q = 256
+    GF256 = galois.GF(q)
     """
     Тест атаки на маленьких параметрах для отладки
     """
@@ -104,11 +136,11 @@ def test_attack_small():
     test_polynomials = []
     for i in range(test_m):
         # Создаем случайную матрицу 6x6 для каждого полинома
-        poly_matrix = self.__GF.Random((test_n, test_n))
+        poly_matrix = GF256.Random((test_n, test_n))
         # Делаем матрицу верхнетреугольной (для квадратичной формы)
         for row in range(test_n):
             for col in range(row):
-                poly_matrix[row, col] = self.__GF(0)  # нули под диагональю
+                poly_matrix[row, col] = GF256(0)  # нули под диагональю
         test_polynomials.append(poly_matrix)
 
     print(f"Созданы тестовые полиномы: {len(test_polynomials)} матриц {test_n}x{test_n}")
@@ -128,3 +160,5 @@ def test_attack_small():
         print("Атака не удалась")
 
 
+# def test_solve_Linear_System():
+   
