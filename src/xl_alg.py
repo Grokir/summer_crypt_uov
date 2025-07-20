@@ -106,7 +106,8 @@ class UOVReconciliationAttack(uov):
         # Решение системы с помощью SVD
         U, S, Vt = np.linalg.svd(M, full_matrices=False)
         # Ищем вектор в ядре
-        kernel = Vt[-1]
+        # kernel = Vt[-1]
+        kernel = np.array(Vt[-1], dtype=float)
         
         # Извлекаем решение для переменных
         print(monomials)
@@ -116,7 +117,8 @@ class UOVReconciliationAttack(uov):
             mono = tuple(1 if j == i else 0 for j in range(1))
             # mono = tuple(1 if j == i else 0)
             idx = monomials.index(mono)
-            solution[f'x_{i}_{self.__v}'] = kernel[idx]
+            name: str= f't_{i}_{self.__v}'
+            solution[name] = int(kernel[idx])
         
         return solution
 
@@ -156,7 +158,7 @@ class UOVReconciliationAttack(uov):
                     print(f"Не удалось решить систему на шаге j={j}")
                     return None
                 
-                # Построение матрицы преобразования
+                # Построение матрицы преобразования                
                 T_j = self.__GF.Identity(self.__n)
                 for i in range(self.__v):
                     var_name = f't_{i}_{self.__v}'
