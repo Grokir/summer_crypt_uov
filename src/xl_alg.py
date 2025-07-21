@@ -138,6 +138,11 @@ class UOVReconciliationAttack(uov):
             M_T = M_T @ T
         return M_T
 
+ 
+    def __quad_form(self, P, v): # Понадобится в алгоритме Sign
+        """vᵀ·P·v в GF(q)."""
+        return v @ (P @ v)
+
 
     def reconciliation_attack_xl(self, max_xl_degree=3):
         print("Начинаем UOV reconciliation attack с XL...")
@@ -185,27 +190,68 @@ class UOVReconciliationAttack(uov):
         return F_polynomials, M_T
 
 
-def test_attack():
-    print("=== Тест UOV reconciliation attack ===")
-    from uovtop import n, m
-    
-    # Генерация тестовых ключей
-    print("Генерируем тестовые ключи...")
-    cpk, csk = generate_keypair()
-    epk = expand_pk(cpk)
-    print(f"Ключи созданы. Размер открытого ключа: {len(epk)} полиномов")
-    
-    # Создание объекта атаки
-    attack = UOVReconciliationAttack(epk, n, m)
-    result = attack.reconciliation_attack_xl(max_xl_degree=3)
-    
-    if result is not None:
-        F_recovered, M_T = result
-        print("Атака завершена успешно!")
-        print(f"Восстановлено {len(F_recovered)} полиномов")
-        print(f"Размер матрицы преобразования: {M_T.shape}")
-    else:
-        print("Атака не удалась")
+    def __gauss_solve(self, A, b):
+        """ Solve a system of linear equations in GF."""
+        tmp_A = A.copy()
+        tmp_b = b.copy().reshape(-1, 1)
+        Ab = self.__GF(np.hstack([tmp_A, tmp_b]))
+        n = tmp_A.shape[0]
+        prev_pivot = 0
 
-if __name__ == "__main__":
-    test_attack()
+        for i in range(n):
+            pivot = next((r for r in range(i, n) if Ab[r, i] != 0), None)
+            if ( pivot is None ):
+                break
+            prev_pivot = pivot
+                
+        # if ( pivot is None ):
+        #     return None
+        pivot = prev_pivot
+        if ( pivot != i ):
+            Ab[[i, pivot]] = Ab[[pivot, i]]
+        
+        Ab[i] *= self.__GF(1) / Ab[i, i]
+        
+        for r in range(n):
+            if ( r != i ) and ( Ab[r, i] != 0 ):
+                Ab[r] -= Ab[i] * Ab[r, i]
+        
+        return Ab[:, -1]
+
+
+
+    def attack_sign(self, msg: bytes, F_recovered, M_T):
+        import random
+        from Crypto.Hash import SHAKE256
+
+        M_len = M_T.shape[0]
+        F_len = (len(F_recovered))
+
+        GF_q = galois.GF(self.__q)
+        salt = random.randbytes(128 // 8)
+        t = GF_q(list(SHAKE256.new(msg + salt).read(M_len)))
+
+        cnt_rounds = 256
+
+        for ctr in range(cnt_rounds):
+            shake = SHAKE256.new(msg + salt + bytes([ctr]))
+            v = GF_q(list(shake.read(M_len)))
+            L = GF_q.Zeros((M_len, M_len))
+        
+        for i in range(F_len):
+            L[i, :] = v @ F_recovered[i]
+        
+        # if ( self.__get_matr_rank(L) < self.__m ):
+        #   continue
+            
+        y   = GF_q([self.__quad_form(M_T, v) for i in range(M_len)])
+        rhs = t - y
+        x   = self.__gauss_solve(L, rhs)
+        s   = GF_q.Zeros(self.__n)
+        
+        s     [:self.__n]     =  v
+        O_bar                 =  GF_q.Zeros((self.__n, self.__n))
+        O_bar [0:, :]         =  GF_q.Identity(self.__n)
+        s                     += (O_bar @ x.reshape((M_len, 1))).flatten()
+
+        return (s, salt)
