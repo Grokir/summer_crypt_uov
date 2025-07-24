@@ -48,13 +48,13 @@ class uov:
     positions = [(r, c) for c in range(self.__v) for r in range(c + 1)]
     for (row, col) in positions:
       for i in range(self.__m):
-        P1[i][row, col] = pk[idx]
+        P1[i][row, col] = pk[idx] % self.__q
         idx += 1
     
     for col in range(self.__m):
       for row in range(self.__v):
         for i in range (self.__m):
-          P2[i][row, col] = pk[idx]
+          P2[i][row, col] = pk[idx] % self.__q
           idx += 1
     
     return (P1, P2)     
@@ -74,7 +74,7 @@ class uov:
       Матрица O размера (n-m) × m
     """
     shake: SHAKE256_XOF = SHAKE256.new(seed_sk)
-    data:  list         = [shake.read(1)[0] for _ in range(self.__v * self.__m)]
+    data:  list         = [shake.read(1)[0] % self.__q for _ in range(self.__v * self.__m)]
     
     return self.__GF(data).reshape((self.__v, self.__m), order='F')
 
@@ -208,19 +208,23 @@ class uov:
     (P1, P2) = self.__expand_p        (  seed_pk  )
     P3       = self.__upper_triangular( P1, P2, O )
     
+    # return cpk, csk
     return (seed_pk, P3), (seed_pk, seed_sk)
   
 
   def sign(self, esk:tuple, msg: bytes):
     (seed_sk, O, P1, S) = esk
-    salt = random.randbytes(self.__salt_bitlen // 8)
-    t = self.__GF(list(SHAKE256.new(msg + salt).read(self.__m)))
+    salt  = random.randbytes(self.__salt_bitlen // 8)
+    # t = self.__GF(list(SHAKE256.new(msg + salt).read(self.__m) % self.__q))
+    shake = SHAKE256.new(msg + salt)
+    t     = self.__GF([shake.read(1)[0] % self.__q for _ in range(self.__m)])
+    
 
     cnt_rounds = 256
 
     for ctr in range(cnt_rounds):
       shake = SHAKE256.new(msg + salt + seed_sk + bytes([ctr]))
-      v = self.__GF(list(shake.read(self.__v)))
+      v = self.__GF([shake.read(1)[0] % self.__q for _ in range(self.__v)])
       L = self.__GF.Zeros((self.__m, self.__m))
       
       for i in range(self.__m):
@@ -251,7 +255,11 @@ class uov:
     
     (s, salt) = signature 
     epk = self.__expand_pk(cpk)
-    t = self.__GF(list(SHAKE256.new(msg + salt).read(self.__m)))
+    # t = self.__GF(list(SHAKE256.new(msg + salt).read(self.__m)))
+    shake = SHAKE256.new(msg + salt)
+    t     = self.__GF([shake.read(1)[0] % self.__q for _ in range(self.__m)])
+    
+
 
     is_valid: bool = True
 
